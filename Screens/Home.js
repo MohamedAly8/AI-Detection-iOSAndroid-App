@@ -1,9 +1,13 @@
 import { View, Text, Switch, Image, StyleSheet, TouchableOpacity } from 'react-native'
-import React, {useState} from 'react'
+import React, {useState, useEffect} from 'react'
 import { Camera, CameraType } from 'expo-camera';
-// import tfjs and
+import * as tf from '@tensorflow/tfjs';
+import {bundleResourceIO } from '@tensorflow/tfjs-react-native';
 
 const Home = () => {
+    const [isTfReady, setTfReady] = useState(false);
+    const [model, setModel] = useState(null);
+
     const [cameraOn, setCameraOn] = useState(false);
     const [type, setType] = useState(CameraType.back);
     const [permission, requestPermission] = Camera.useCameraPermissions();
@@ -14,6 +18,26 @@ const Home = () => {
     const [numRed, setnumRed] = useState(3);
     const [numOrange, setnumOrange] = useState(0);
 
+    useEffect(() => {
+      (async () => {
+        await tf.ready().catch((error) => {
+          console.log(error);
+        });
+        setTfReady(true);
+
+        const model = require('../model/model.json');
+        const weights1 = require('../model/group1-shard1of3.bin');
+        const weights2 = require('../model/group1-shard2of3.bin');
+        const weights3 = require('../model/group1-shard3of3.bin');
+        const loadedModel = await tf.loadGraphModel(
+          bundleResourceIO(model, [weights1, weights2, weights3])
+        ).catch((error) => {
+          console.log(error);
+        });
+  
+        setModel(loadedModel);
+      })();
+    }, []);
 
     if (!permission){
         return <Text>No permission</Text>
@@ -34,7 +58,8 @@ const Home = () => {
   
     return (
       <View style={styles.container}>
-        
+        <Text>TFJS ready? {isTfReady ? <Text>Yes</Text> : 'No'}</Text>
+        <Text>Model ready? {model ? <Text>Yes</Text> : 'No'}</Text>
         <View style={styles.camerasection}>
           {cameraOn ? (
             <Camera style={styles.camera} type={type}>
