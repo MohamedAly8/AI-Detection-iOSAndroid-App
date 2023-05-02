@@ -1,8 +1,11 @@
-import { View, Text, Switch, Image, StyleSheet, TouchableOpacity } from 'react-native'
-import React, {useState, useEffect} from 'react'
+import { View, Text, Switch, Image, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native'
+import React, {useState, useEffect, useRef} from 'react'
 import { Camera, CameraType } from 'expo-camera';
 import * as tf from '@tensorflow/tfjs';
 import {bundleResourceIO } from '@tensorflow/tfjs-react-native';
+import { Asset } from 'expo-asset';
+import { manipulateAsync } from 'expo-image-manipulator';
+
 
 const Home = () => {
     const [isTfReady, setTfReady] = useState(false);
@@ -17,6 +20,13 @@ const Home = () => {
     const [numYellow, setnumYellow] = useState(1);
     const [numRed, setnumRed] = useState(3);
     const [numOrange, setnumOrange] = useState(0);
+
+    
+
+    // create useRef for imageRef
+    const imageRef = useRef();
+
+    
 
     useEffect(() => {
       (async () => {
@@ -55,26 +65,64 @@ const Home = () => {
     function toggleCameraType() {
         setType(current => (current === CameraType.back ? CameraType.front : CameraType.back));
       }
+    const handleImagePress = async () => {
+      const photoAsset = Asset.fromModule(require('../assets/test-imgs/testSkittle1.jpg'));
+      
+      await photoAsset.downloadAsync();
+      const photo = { uri: photoAsset.uri };
+      console.log(photo);
+      await handleImageCapture(photo);
+    };  
+
+    const handleImageCapture = async (photo) => {
+      console.log('handlingImageCapture')
+      
+      const imageAssetPath = photo.uri;
+
+      console.log('imageAssetPath ready')
+      console.log(imageAssetPath)
+      
+      const imageTensor = await imageToTensor(imageAssetPath);
+      console.log('back from conversion')
+      
+      const predictions = await model.predict(imageTensor).data();
+      console.log('predictions ready')
+      console.log(predictions);
+    }
+    
+    const imageToTensor = async (path) => {
+      console.log('converting image to tensor')
+      const img = await manipulateAsync(
+        path,
+        [{ resize: { width: 224, height: 224 } }],
+        { format: 'png', compress: 1 }
+      );
+      const tImg = tf.browser.fromPixels(img).toFloat();
+      const offset = tf.scalar(255);
+      const normalized = tImg.div(offset);
+      const batched = normalized.expandDims(0);
+      console.log('done conversion')
+      return batched;
+    }
+
+
+
+      
   
     return (
       <View style={styles.container}>
         <Text>TFJS ready? {isTfReady ? <Text>Yes</Text> : 'No'}</Text>
         <Text>Model ready? {model ? <Text>Yes</Text> : 'No'}</Text>
         <View style={styles.camerasection}>
-          {cameraOn ? (
-            <Camera style={styles.camera} type={type}>
-                <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.button} onPress={toggleCameraType}>
-                    <Text style={styles.text}>Flip Camera</Text>
-                </TouchableOpacity>
-                </View>
-            </Camera>
-          ) : (
-            <Image style={styles.imageplaceholder}
-              source={require('../assets/lion.png')}
-            />
+        <TouchableOpacity onPress={handleImagePress}>
+          <Image
+            ref={imageRef}
+            source={require('../assets/test-imgs/testSkittle1.jpg')}
+            style={styles.image}
+              />
 
-          )}
+        </TouchableOpacity>
+       
         </View>
         <View>
           <Switch value={cameraOn} onValueChange={handleToggleCamera} />
@@ -154,6 +202,11 @@ const styles = StyleSheet.create({
         borderBottomColor: '#CCCCCC',
         color: 'white',
     },
+    image: {
+      width: 400,
+      height: 400,
+        
+    }
 
 
   });
