@@ -1,11 +1,8 @@
-import { View, Text, Switch, Image, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native'
+import { View, Text, Switch, Image, StyleSheet, TouchableOpacity, Platform } from 'react-native'
 import React, {useState, useEffect, useRef} from 'react'
 import { Camera, CameraType } from 'expo-camera';
 import * as tf from '@tensorflow/tfjs';
-import {bundleResourceIO } from '@tensorflow/tfjs-react-native';
-import { Asset } from 'expo-asset';
-import { manipulateAsync } from 'expo-image-manipulator';
-
+import {bundleResourceIO, cameraWithTensors } from '@tensorflow/tfjs-react-native';
 
 const Home = () => {
     const [isTfReady, setTfReady] = useState(false);
@@ -20,13 +17,13 @@ const Home = () => {
     const [numYellow, setnumYellow] = useState(1);
     const [numRed, setnumRed] = useState(3);
     const [numOrange, setnumOrange] = useState(0);
+    const cameraRef = useRef(null);
+    const TensorCamera = cameraWithTensors(Camera);
 
-    
-
-    // create useRef for imageRef
-    const imageRef = useRef();
-
-    
+  const [prediction, setPredictions] = useState();
+    let requestAnimationFrameId = 0;
+    let frameCount = 0;
+    let makePredictionsEveryNFrame = 1;
 
     useEffect(() => {
       (async () => {
@@ -49,6 +46,15 @@ const Home = () => {
       })();
     }, []);
 
+
+    useEffect(() => {
+      return () => {
+        cancelAnimationFrame(requestAnimationFrameId);
+      };
+    }, [requestAnimationFrameId]);
+
+
+
     if (!permission){
         return <Text>No permission</Text>
     
@@ -65,64 +71,87 @@ const Home = () => {
     function toggleCameraType() {
         setType(current => (current === CameraType.back ? CameraType.front : CameraType.back));
       }
-    const handleImagePress = async () => {
-      const photoAsset = Asset.fromModule(require('../assets/test-imgs/testSkittle1.jpg'));
       
-      await photoAsset.downloadAsync();
-      const photo = { uri: photoAsset.uri };
-      console.log(photo);
-      await handleImageCapture(photo);
-    };  
+    const handleCameraStream = (tensors) => {
+        if (!tensors) {
+          console.log("Image not found!");
+        }
+        const loop = async () => {
+          if (frameCount % makePredictionsEveryNFrame === 0) {
+            const imageTensor = tensors.next().value;
+            if (model) {
+              const results = await startPrediction(model, imageTensor);
+              console.log('results are in')
+              setPredictions(results);
+              console.log(prediction)
+            }
+            tf.dispose(tensors); 
+          }
+          frameCount += 1;
+          frameCount = frameCount % makePredictionsEveryNFrame;
+          requestAnimationFrameId = requestAnimationFrame(loop);
+        };
+        loop();
+      };
 
-    const handleImageCapture = async (photo) => {
-      console.log('handlingImageCapture')
-      
-      const imageAssetPath = photo.uri;
+      const startPrediction = async (model, tensor) => {
+        try {
+          console.log(tensor);
 
-      console.log('imageAssetPath ready')
-      console.log(imageAssetPath)
-      
-      const imageTensor = await imageToTensor(imageAssetPath);
-      console.log('back from conversion')
-      
-      const predictions = await model.predict(imageTensor).data();
-      console.log('predictions ready')
-      console.log(predictions);
-    }
-    
-    const imageToTensor = async (path) => {
-      console.log('converting image to tensor')
-      const img = await manipulateAsync(
-        path,
-        [{ resize: { width: 224, height: 224 } }],
-        { format: 'png', compress: 1 }
-      );
-      const tImg = tf.browser.fromPixels(img).toFloat();
-      const offset = tf.scalar(255);
-      const normalized = tImg.div(offset);
-      const batched = normalized.expandDims(0);
-      console.log('done conversion')
-      return batched;
-    }
+          const preprocessed = tf.tensor(tensor.arraySync()).resizeBilinear([224, 224]).div(255);
+
+          // predict the tensor
+          const output = await model.predict(preprocessed, {batchSize: 1});
+          
+          return output.dataSync(); 
+        } catch (error) {
+          console.log('Error predicting from tesor image', error);
+        }
+      };
+
+      let textureDims;
+      if (Platform.OS === 'ios') {
+        textureDims = {
+          height: 1920,
+          width: 1080,
+        };
+      } else {
+        textureDims = {
+          height: 1200,
+          width: 1600,
+        };
+      }
 
 
-
-      
   
+    
     return (
       <View style={styles.container}>
         <Text>TFJS ready? {isTfReady ? <Text>Yes</Text> : 'No'}</Text>
         <Text>Model ready? {model ? <Text>Yes</Text> : 'No'}</Text>
         <View style={styles.camerasection}>
-        <TouchableOpacity onPress={handleImagePress}>
-          <Image
-            ref={imageRef}
-            source={require('../assets/test-imgs/testSkittle1.jpg')}
-            style={styles.image}
-              />
+          {cameraOn ? (
+            <TensorCamera style={styles.camera} type={type} ref={cameraRef}
+              cameraTextureHeight={textureDims.height}
+              cameraTextureWidth={textureDims.width}
+              resizeHeight={224}
+              resizeWidth={224}
+              resizeDepth={3}
+              onReady={tensors => handleCameraStream(tensors)}
+              autorender={true}
+            >
+                <View style={styles.buttonContainer}>
+                <TouchableOpacity style={styles.button} onPress={toggleCameraType}>
+                    <Text style={styles.text}>Flip Camera</Text>
+                </TouchableOpacity>
+                </View>
+            </TensorCamera>
+          ) : (
+            <Image style={styles.imageplaceholder}
+              source={require('../assets/lion.png')}
+            />
 
-        </TouchableOpacity>
-       
+          )}
         </View>
         <View>
           <Switch value={cameraOn} onValueChange={handleToggleCamera} />
@@ -202,11 +231,6 @@ const styles = StyleSheet.create({
         borderBottomColor: '#CCCCCC',
         color: 'white',
     },
-    image: {
-      width: 400,
-      height: 400,
-        
-    }
 
 
   });
