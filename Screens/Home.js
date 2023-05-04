@@ -1,8 +1,9 @@
-import { View, Text, Switch, Image, StyleSheet, TouchableOpacity } from 'react-native'
-import React, {useState, useEffect} from 'react'
+import { View, Text, Switch, Image, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native'
+import React, {useState, useEffect, useRef} from 'react'
 import { Camera, CameraType } from 'expo-camera';
 import * as tf from '@tensorflow/tfjs';
 import {bundleResourceIO } from '@tensorflow/tfjs-react-native';
+
 
 const Home = () => {
     const [isTfReady, setTfReady] = useState(false);
@@ -17,6 +18,9 @@ const Home = () => {
     const [numYellow, setnumYellow] = useState(1);
     const [numRed, setnumRed] = useState(3);
     const [numOrange, setnumOrange] = useState(0);
+
+    // create useRef for imageRef
+    const imageRef = useRef();
 
     useEffect(() => {
       (async () => {
@@ -61,20 +65,6 @@ const Home = () => {
         <Text>TFJS ready? {isTfReady ? <Text>Yes</Text> : 'No'}</Text>
         <Text>Model ready? {model ? <Text>Yes</Text> : 'No'}</Text>
         <View style={styles.camerasection}>
-          {cameraOn ? (
-            <Camera style={styles.camera} type={type}>
-                <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.button} onPress={toggleCameraType}>
-                    <Text style={styles.text}>Flip Camera</Text>
-                </TouchableOpacity>
-                </View>
-            </Camera>
-          ) : (
-            <Image style={styles.imageplaceholder}
-              source={require('../assets/lion.png')}
-            />
-
-          )}
         </View>
         <View>
           <Switch value={cameraOn} onValueChange={handleToggleCamera} />
@@ -90,8 +80,6 @@ const Home = () => {
             <Text style={styles.insighttext}> Red: {numRed}</Text>
             <Text style={styles.insighttext}> Orange: {numOrange}</Text>
             </View>
-
-
         </View>
       </View>
     );
@@ -154,10 +142,14 @@ const styles = StyleSheet.create({
         borderBottomColor: '#CCCCCC',
         color: 'white',
     },
+    image: {
+      width: 400,
+      height: 400,
+        
+    }
 
 
   });
   
 
 export default Home
-
